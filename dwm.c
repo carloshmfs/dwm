@@ -20,6 +20,7 @@
  *
  * To understand everything else, start reading main().
  */
+#include <time.h>
 #include <errno.h>
 #include <locale.h>
 #include <signal.h>
@@ -233,6 +234,7 @@ static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void zoom(const Arg *arg);
+static const char* datetime();
 
 /* variables */
 static const char broken[] = "broken";
@@ -695,6 +697,25 @@ dirtomon(int dir)
 	return m;
 }
 
+const char*
+datetime()
+{
+    time_t raw_time;
+    struct tm *time_info;
+    char buffer[80];
+
+    // Get the current time
+    time(&raw_time);
+
+    // Convert to local time format
+    time_info = localtime(&raw_time);
+
+    // Format the time as desired (e.g., YYYY-MM-DD HH:MM:SS)
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", time_info);
+
+    return "hello";
+}
+
 void
 drawbar(Monitor *m)
 {
@@ -709,9 +730,14 @@ drawbar(Monitor *m)
 
 	/* draw status first so it can be overdrawn by tags later */
 	if (m == selmon) { /* status is only drawn on selected monitor */
+        const char* datetime_text = datetime();
 		drw_setscheme(drw, scheme[SchemeNorm]);
+
 		tw = TEXTW(stext) - lrpad + 2; /* 2px right padding */
+        int datetime_w = TEXTW(datetime_text) - lrpad + 20;
+
 		drw_text(drw, m->ww - tw, 0, tw, bh, 0, stext, 0);
+		drw_text(drw, m->ww - datetime_w, 0, datetime_w, bh, 0, datetime_text, 0);
 	}
 
 	for (c = m->clients; c; c = c->next) {
