@@ -1,8 +1,8 @@
-#include <stdlib.h>
+#include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
 
 #ifndef NO_X
 #include <X11/Xlib.h>
@@ -11,59 +11,58 @@
 #include "dwmblocks.h"
 #include "util.h"
 
-//Modify this file to change what commands output to your statusbar, and recompile using the make command.
+// Modify this file to change what commands output to your statusbar, and recompile using the make command.
 static const Block blocks[] = {
-	/*Icon*/	/*Command*/		/*Update Interval*/	/*Update Signal*/
-	{"MEM: ", shell_cmd, { .cmdstr = "free -h | awk '/^Mem/ { print $3\"/\"$2 }' | sed s/i//g" },	30,		0},
+    /*Icon*/ /*Command*/ /*Update Interval*/ /*Update Signal*/
+    { "MEM: ", shell_cmd, { .cmdstr = "free -h | awk '/^Mem/ { print $3\"/\"$2 }' | sed s/i//g" }, 30, 0 },
 
-	{"", shell_cmd, { .cmdstr = "date '+%a %d/%m/%Y %T'" },					5,		0},
+    { "", shell_cmd, { .cmdstr = "date '+%a %d/%m/%Y %T'" }, 5, 0 },
 };
 
-//sets delimiter between status commands. NULL character ('\0') means no delimiter.
+// sets delimiter between status commands. NULL character ('\0') means no delimiter.
 char delim[] = " | ";
 unsigned int delimLen = 5;
 
-char statusbar[LENGTH(blocks)][CMDLENGTH] = {0};
+char statusbar[LENGTH(blocks)][CMDLENGTH] = { 0 };
 char statusstr[2][STATUSLENGTH];
 int statusContinue = 1;
 
 #ifndef NO_X
 
 void setroot();
-static void (*writestatus) () = setroot;
+static void (*writestatus)() = setroot;
 int setupX();
-static Display *dpy;
+static Display* dpy;
 static int screen;
 static Window root;
 
 #else
 
-void (*writestatus) () = pstdout;
+void (*writestatus)() = pstdout;
 
 #endif
 // static int returnStatus = 0;
 
-//opens process *cmd and stores output in *output
-void getcmd(const Block *block, char *output)
+// opens process *cmd and stores output in *output
+void getcmd(const Block* block, char* output)
 {
     if (block->type == shell_cmd) {
-        //make sure status is same until output is ready
-        char tempstatus[CMDLENGTH] = {0};
+        // make sure status is same until output is ready
+        char tempstatus[CMDLENGTH] = { 0 };
         strcpy(tempstatus, block->icon);
-        FILE *cmdf = popen(block->command.cmdstr, "r");
+        FILE* cmdf = popen(block->command.cmdstr, "r");
         if (!cmdf)
             return;
         int i = strlen(block->icon);
-        fgets(tempstatus+i, CMDLENGTH-i-delimLen, cmdf);
+        fgets(tempstatus + i, CMDLENGTH - i - delimLen, cmdf);
         i = strlen(tempstatus);
-        //if block and command output are both not empty
+        // if block and command output are both not empty
         if (i != 0) {
-            //only chop off newline if one is present at the end
-            i = tempstatus[i-1] == '\n' ? i-1 : i;
+            // only chop off newline if one is present at the end
+            i = tempstatus[i - 1] == '\n' ? i - 1 : i;
             if (delim[0] != '\0') {
-                strncpy(tempstatus+i, delim, delimLen);
-            }
-            else
+                strncpy(tempstatus + i, delim, delimLen);
+            } else
                 tempstatus[i++] = '\0';
         }
         strcpy(output, tempstatus);
@@ -75,126 +74,118 @@ void getcmd(const Block *block, char *output)
 
 void getcmds(int time)
 {
-	const Block* current;
-	for (unsigned int i = 0; i < LENGTH(blocks); i++) {
-		current = blocks + i;
-		if ((current->interval != 0 && time % current->interval == 0) || time == -1)
-			getcmd(current, statusbar[i]);
-	}
+    const Block* current;
+    for (unsigned int i = 0; i < LENGTH(blocks); i++) {
+        current = blocks + i;
+        if ((current->interval != 0 && time % current->interval == 0) || time == -1)
+            getcmd(current, statusbar[i]);
+    }
 }
 
 void getsigcmds(unsigned int signal)
 {
-	const Block *current;
-	for (unsigned int i = 0; i < LENGTH(blocks); i++) {
-		current = blocks + i;
-		if (current->signal == signal)
-			getcmd(current,statusbar[i]);
-	}
+    const Block* current;
+    for (unsigned int i = 0; i < LENGTH(blocks); i++) {
+        current = blocks + i;
+        if (current->signal == signal)
+            getcmd(current, statusbar[i]);
+    }
 }
 
 void setupsignals()
 {
 #ifndef __OpenBSD__
-	    /* initialize all real time signals with dummy handler */
+    /* initialize all real time signals with dummy handler */
     for (int i = SIGRTMIN; i <= SIGRTMAX; i++)
         signal(i, dummysighandler);
 #endif
 
-	for (unsigned int i = 0; i < LENGTH(blocks); i++) {
-		if (blocks[i].signal > 0)
-			signal(SIGMINUS+blocks[i].signal, sighandler);
-	}
-
+    for (unsigned int i = 0; i < LENGTH(blocks); i++) {
+        if (blocks[i].signal > 0)
+            signal(SIGMINUS + blocks[i].signal, sighandler);
+    }
 }
 
-int getstatus(char *str, char *last)
+int getstatus(char* str, char* last)
 {
-	strcpy(last, str);
-	str[0] = '\0';
-	for (unsigned int i = 0; i < LENGTH(blocks); i++)
-		strcat(str, statusbar[i]);
-	str[strlen(str)-strlen(delim)] = '\0';
-	return strcmp(str, last);//0 if they are the same
+    strcpy(last, str);
+    str[0] = '\0';
+    for (unsigned int i = 0; i < LENGTH(blocks); i++)
+        strcat(str, statusbar[i]);
+    str[strlen(str) - strlen(delim)] = '\0';
+    return strcmp(str, last); // 0 if they are the same
 }
 
 #ifndef NO_X
 void setroot()
 {
-	if (!getstatus(statusstr[0], statusstr[1]))//Only set root if text has changed.
-		return;
-	XStoreName(dpy, root, statusstr[0]);
-	XFlush(dpy);
+    if (!getstatus(statusstr[0], statusstr[1])) // Only set root if text has changed.
+        return;
+    XStoreName(dpy, root, statusstr[0]);
+    XFlush(dpy);
 }
 
 int setupX()
 {
-	dpy = XOpenDisplay(NULL);
-	if (!dpy) {
-		fprintf(stderr, "dwmblocks: Failed to open display\n");
-		return 0;
-	}
-	screen = DefaultScreen(dpy);
-	root = RootWindow(dpy, screen);
-	return 1;
+    dpy = XOpenDisplay(NULL);
+    if (!dpy) {
+        fprintf(stderr, "dwmblocks: Failed to open display\n");
+        return 0;
+    }
+    screen = DefaultScreen(dpy);
+    root = RootWindow(dpy, screen);
+    return 1;
 }
 #endif
 
 void pstdout()
 {
-	if (!getstatus(statusstr[0], statusstr[1]))//Only write out if text has changed.
-		return;
-	printf("%s\n",statusstr[0]);
-	fflush(stdout);
+    if (!getstatus(statusstr[0], statusstr[1])) // Only write out if text has changed.
+        return;
+    printf("%s\n", statusstr[0]);
+    fflush(stdout);
 }
-
 
 void statusloop()
 {
-	setupsignals();
-	int i = 0;
-	getcmds(-1);
-	while (1) {
-		getcmds(i++);
-		writestatus();
-		if (!statusContinue)
-			break;
-		sleep(1.0);
-	}
+    setupsignals();
+    int i = 0;
+    getcmds(-1);
+    while (1) {
+        getcmds(i++);
+        writestatus();
+        if (!statusContinue)
+            break;
+        sleep(1.0);
+    }
 }
 
 #ifndef __OpenBSD__
 /* this signal handler should do nothing */
-void dummysighandler(int signum)
-{
-    return;
-}
+void dummysighandler(int signum) { return; }
 #endif
 
 void sighandler(int signum)
 {
-	getsigcmds(signum-SIGPLUS);
-	writestatus();
+    getsigcmds(signum - SIGPLUS);
+    writestatus();
 }
 
-void termhandler()
-{
-	statusContinue = 0;
-}
+void termhandler() { statusContinue = 0; }
 
 void* initblocks(void* args)
 {
 #ifndef NO_X
-	if (!setupX())
+    if (!setupX())
         exit(1);
 #endif
-	delimLen = MIN(delimLen, strlen(delim));
-	delim[delimLen++] = '\0';
-	signal(SIGTERM, termhandler);
-	signal(SIGINT, termhandler);
-	statusloop();
+    delimLen = MIN(delimLen, strlen(delim));
+    delim[delimLen++] = '\0';
+    signal(SIGTERM, termhandler);
+    signal(SIGINT, termhandler);
+    statusloop();
 #ifndef NO_X
-	XCloseDisplay(dpy);
+    XCloseDisplay(dpy);
 #endif
 
     return NULL;
