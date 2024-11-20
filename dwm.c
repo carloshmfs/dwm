@@ -216,7 +216,6 @@ static void setfullscreen(Client* c, int fullscreen);
 static void setlayout(const Arg* arg);
 static void setmfact(const Arg* arg);
 static void setup(void);
-static void setupstatus(void);
 static void seturgent(Client* c, int urg);
 static void showhide(Client* c);
 static void spawn(const Arg* arg);
@@ -1568,13 +1567,6 @@ void setup(void)
     focus(NULL);
 }
 
-void setupstatus(void)
-{
-    pthread_t statusbar_thread;
-    pthread_create(&statusbar_thread, NULL, initblocks, NULL);
-    pthread_join(statusbar_thread, NULL);
-}
-
 void seturgent(Client* c, int urg)
 {
     XWMHints* wmh;
@@ -2063,6 +2055,12 @@ void zoom(const Arg* arg)
     pop(c);
 }
 
+void* runthread(void* arg)
+{
+    run();
+    return NULL;
+}
+
 int main(int argc, char* argv[])
 {
     if (argc == 2 && !strcmp("-v", argv[1])) {
@@ -2075,19 +2073,22 @@ int main(int argc, char* argv[])
         fputs("warning: no locale support\n", stderr);
     }
 
-    if (!(dpy = XOpenDisplay("dwm_test"))) {
+    if (!(dpy = XOpenDisplay(NULL))) {
         die("dwm: cannot open display");
     }
 
     checkotherwm();
     setup();
-    setupstatus();
 #ifdef __OpenBSD__
     if (pledge("stdio rpath proc exec", NULL) == -1)
         die("pledge");
 #endif /* __OpenBSD__ */
     scan();
-    run();
+
+    pthread_t run_thread_id;
+    pthread_create(&run_thread_id, NULL, runthread, NULL);
+    pthread_join(run_thread_id, NULL);
+
     cleanup();
     XCloseDisplay(dpy);
 
